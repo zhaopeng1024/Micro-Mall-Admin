@@ -1,10 +1,10 @@
 <template>
   <div>
-    <el-switch v-model="draggable" active-text="开启拖拽" inactive-text="关闭拖拽"></el-switch>
+    <el-switch v-model="draggable" active-text="开启拖拽" inactive-text="关闭拖拽"></el-switch>&nbsp;&nbsp;
+    <el-button type="danger" @click="removeBatch" plain :disabled="checkedNodes.length <= 0">批量删除</el-button>
     <el-tree
-      :data="gategories"
+      :data="categories"
       :props="defaultProps"
-      @node-click="handleNodeClick"
       show-checkbox
       node-key="catId"
       :expand-on-click-node=false
@@ -13,6 +13,8 @@
       :allow-drop="allowDrop"
       @node-drag-start="nodeDragStart"
       @node-drop="handleDrop"
+      @check="check"
+      ref="categoryTree"
     >
       <span class="custom-tree-node" slot-scope="{ node, data }">
         <span>{{ node.label }}</span>
@@ -44,6 +46,7 @@
     </el-tree>
 
     <el-dialog
+      width="30%"
       :title="dialogTitle"
       :visible.sync="dialogFormVisible"
       :close-on-click-modal="false"
@@ -89,26 +92,26 @@ export default {
       },
       levels: new Set(),
       dialogFormVisible: false,
-      gategories: [],
+      categories: [],
       expandedKeys: [],
       defaultProps: {
         children: "subCategories",
         label: "name",
       },
       toUpdateNodes: [],
-      parentCid: []
+      checkedNodes: []
     };
   },
   methods: {
-    handleNodeClick(data) {
-      
+    check(node, data) {
+      this.checkedNodes = data.checkedNodes;
     },
-    getGategories() {
+    getCategories() {
       this.$http({
         url: this.$http.adornUrl("/product/category/tree"),
         method: "get",
       }).then(({ data }) => {
-        this.gategories = data.data;
+        this.categories = data.data;
       });
     },
     toAppend(data) {
@@ -165,7 +168,7 @@ export default {
         // 关闭对话框
         this.dialogFormVisible = false;
         // 重新刷新分类树
-        this.getGategories();
+        this.getCategories();
         // 同时自动展开当前删除子分类的父分类
         this.expandedKeys = [this.category.parentCid];
       });
@@ -182,7 +185,7 @@ export default {
           message: "修改成功！",
         });
         this.dialogFormVisible = false;
-        this.getGategories();
+        this.getCategories();
         this.expandedKeys = [this.category.parentCid];
       });
     },
@@ -204,11 +207,35 @@ export default {
               message: "删除成功！",
             });
             // 重新刷新分类树
-            this.getGategories();
+            this.getCategories();
             // 同时自动展开当前删除子分类的父分类
             this.expandedKeys = [node.parent.data.catId];
           });
       }).catch(() => {});
+    },
+    removeBatch() { // 批量删除
+      let checkedNodes = this.$refs.categoryTree.getCheckedNodes();
+      
+      this.$confirm("请确定是否批量删除已选择分类？", "提示", {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
+      }).then(() => {
+        let ids = checkedNodes.map(item => item.catId);
+        console.info(checkedNodes, ids);
+        this.$http({
+          url: this.$http.adornUrl("/product/category/delete"),
+          method: "post",
+          data: this.$http.adornData(ids, false),
+        }).then(({ data }) => {
+          this.$message({
+            type: "success",
+            message: "删除成功！",
+          });
+          this.getCategories();
+        });
+      }).catch(() => {});
+      
     },
     allowDrop(draggingNode, dropNode, type) {
       // 判断是否允许拖拽成功的依据是：当前拖拽节点的总层数与目标位置所在父节点的层数之和不大于3
@@ -254,7 +281,6 @@ export default {
         pCid = dropNode.data.parentCid;
         siblings = dropNode.parent.childNodes;
       }
-      this.parentCid = [pCid];
       siblings.forEach((item, index) => {
         if (item.data.catId === draggingNode.data.catId) {
           let catLevel = draggingNode.level;
@@ -282,15 +308,16 @@ export default {
           type: "success",
           message: "拖拽成功！",
         });
-        this.getGategories();
-        this.expandedKeys = [this.parentCid];
+        this.getCategories();
+        this.expandedKeys = [pCid];
+        this.checkedNodes = [];
       });
       
     }
   },
   // 创建完成时触发
   created() {
-    this.getGategories();
+    this.getCategories();
   },
 };
 </script>
